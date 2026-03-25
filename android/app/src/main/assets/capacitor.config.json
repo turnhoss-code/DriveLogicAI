@@ -1,0 +1,5 @@
+{
+	"appId": "com.example.cardiagnostics",
+	"appName": "Car Diagnostics AI",
+	"webDir": "dist"
+}
