@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrainCircuit, AlertCircle, CheckCircle2, Zap, Thermometer, Gauge, Activity, Bluetooth, AlertTriangle, ShieldCheck, ShieldAlert, Info, Usb } from 'lucide-react';
+import { BrainCircuit, AlertCircle, CheckCircle2, Zap, Thermometer, Gauge, Activity, Bluetooth, AlertTriangle, ShieldCheck, ShieldAlert, Info, Usb, ShoppingCart, Wrench } from 'lucide-react';
 import { OBDData } from '../types';
 import { runAIDiagnosis, fetchDTCDefinition } from '../services/geminiService';
 import { motion, AnimatePresence } from 'motion/react';
@@ -16,9 +16,10 @@ interface OBDTabProps {
   onConnectReal: () => Promise<void> | void;
   onConnectSerial: (port?: any) => Promise<void> | void;
   shockWarning?: boolean;
+  isPro?: boolean;
 }
 
-export default function OBDTab({ data, isSimulation, connectionStatus, connectedDeviceName, onConnectReal, onConnectSerial, shockWarning }: OBDTabProps) {
+export default function OBDTab({ data, isSimulation, connectionStatus, connectedDeviceName, onConnectReal, onConnectSerial, shockWarning, isPro }: OBDTabProps) {
   const [diagnosis, setDiagnosis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
@@ -162,6 +163,10 @@ export default function OBDTab({ data, isSimulation, connectionStatus, connected
   const status = getStatusConfig();
 
   const handleDiagnosis = async () => {
+    if (!isPro) {
+      setDiagnosis("🌟 **Pro Feature Required**\n\nUpgrade to ZTCD Pro to unlock unlimited AI-powered diagnostics, predictive maintenance, and advanced telemetry analysis.");
+      return;
+    }
     setIsAnalyzing(true);
     const result = await runAIDiagnosis(data);
     setDiagnosis(result);
@@ -593,10 +598,31 @@ export default function OBDTab({ data, isSimulation, connectionStatus, connected
                               Analyzing code with AI...
                             </span>
                           ) : (
-                            <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-a:text-car-accent">
-                              <ReactMarkdown>
-                                {dtcDefinitions[selectedCode] || OBD_CODE_DEFINITIONS[selectedCode] || "No definition available for this code."}
-                              </ReactMarkdown>
+                            <div className="space-y-4">
+                              <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-a:text-car-accent">
+                                <ReactMarkdown>
+                                  {dtcDefinitions[selectedCode] || OBD_CODE_DEFINITIONS[selectedCode] || "No definition available for this code."}
+                                </ReactMarkdown>
+                              </div>
+                              
+                              <div className="flex gap-2 pt-2 border-t border-white/10">
+                                <a 
+                                  href={`https://www.amazon.com/s?k=obd2+replacement+part+${selectedCode}&tag=ztcd-20`} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="flex-1 bg-[#FF9900] hover:bg-[#FF9900]/90 text-black px-3 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
+                                >
+                                  <ShoppingCart size={14} /> Buy Parts
+                                </a>
+                                <a 
+                                  href={`https://repairpal.com/estimator?symptom=${selectedCode}`} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
+                                >
+                                  <Wrench size={14} /> Find Mechanic
+                                </a>
+                              </div>
                             </div>
                           )}
                         </div>

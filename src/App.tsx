@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Activity, Gauge, Map as MapIcon, History, Play, Square, BrainCircuit, AlertTriangle, ChevronRight, Settings, X, Key, Wrench, Shield, Eye, EyeOff, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Activity, Gauge, Map as MapIcon, History, Play, Square, BrainCircuit, AlertTriangle, ChevronRight, Settings, X, Key, Wrench, Shield, Eye, EyeOff, Trash2, Truck, Share2, Crown, Minimize2, Bot } from 'lucide-react';
 import { useJsApiLoader } from '@react-google-maps/api';
 import { motion, AnimatePresence } from 'motion/react';
 import { OBDData, Trip, DamagePoint, TripEvent, SensorPoint, NavigationState } from './types';
@@ -16,6 +16,7 @@ import FloatingMap from './components/FloatingMap';
 import ChatAssistant, { ChatAssistantHandle } from './components/ChatAssistant';
 import MusicPlayer, { MusicPlayerHandle } from './components/MusicPlayer';
 import MaintenanceTab from './components/MaintenanceTab';
+import FleetTab from './components/FleetTab';
 import { runAIDiagnosis } from './services/geminiService';
 import { MaintenanceTask } from './types';
 
@@ -25,7 +26,7 @@ const libraries: ("places" | "routes" | "geocoding" | "core")[] = ["places", "ro
 export default function App() {
   const musicPlayerRef = useRef<MusicPlayerHandle>(null);
   const chatAssistantRef = useRef<ChatAssistantHandle>(null);
-  const [activeTab, setActiveTab] = useState<'obd' | 'damage' | 'gps' | 'maintenance'>('obd');
+  const [activeTab, setActiveTab] = useState<'obd' | 'damage' | 'gps' | 'maintenance' | 'fleet'>('obd');
   const [obdData, setObdData] = useState<OBDData>({
     rpm: 0,
     speed: 0,
@@ -59,6 +60,8 @@ export default function App() {
   const [currentTrip, setCurrentTrip] = useState<Partial<Trip> | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isPro, setIsPro] = useState(() => localStorage.getItem('ztcd_is_pro') === 'true');
+  const [shareData, setShareData] = useState(() => localStorage.getItem('ztcd_share_data') === 'true');
   const [showApiKeys, setShowApiKeys] = useState(false);
   const [sensorHistory, setSensorHistory] = useState<SensorPoint[]>([]);
   const [useEsp32Addon, setUseEsp32Addon] = useState(() => {
@@ -75,6 +78,40 @@ export default function App() {
     libraries
   });
   const [isSimulation, setIsSimulation] = useState(true);
+  const [isPanelMinimized, setIsPanelMinimized] = useState(true);
+  const [panelSize, setPanelSize] = useState({ width: 320, height: 450 });
+  const resizeRef = useRef<HTMLDivElement>(null);
+
+  const handleResize = useCallback((e: MouseEvent | TouchEvent) => {
+    if (!resizeRef.current) return;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    
+    // Calculate new width and height based on top-left resize handle
+    // Since the panel is fixed to bottom-right, moving the top-left handle changes width and height
+    const rect = resizeRef.current.getBoundingClientRect();
+    const newWidth = Math.max(200, rect.right - clientX);
+    const newHeight = Math.max(150, rect.bottom - clientY);
+    
+    setPanelSize({ width: newWidth, height: newHeight });
+  }, []);
+
+  const stopResize = useCallback(() => {
+    window.removeEventListener('mousemove', handleResize);
+    window.removeEventListener('mouseup', stopResize);
+    window.removeEventListener('touchmove', handleResize);
+    window.removeEventListener('touchend', stopResize);
+  }, [handleResize]);
+
+  const startResize = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    window.addEventListener('mousemove', handleResize);
+    window.addEventListener('mouseup', stopResize);
+    window.addEventListener('touchmove', handleResize);
+    window.addEventListener('touchend', stopResize);
+  }, [handleResize, stopResize]);
+
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [connectedDeviceName, setConnectedDeviceName] = useState<string | null>(null);
   const [bluetoothDevice, setBluetoothDevice] = useState<BluetoothDevice | null>(null);
@@ -373,6 +410,7 @@ export default function App() {
     { id: 'damage', label: 'Damage Log', icon: Activity },
     { id: 'gps', label: 'GPS Routes', icon: MapIcon },
     { id: 'maintenance', label: 'Maintenance', icon: Wrench },
+    { id: 'fleet', label: 'Fleet', icon: Truck },
   ] as const;
 
   // Real OBD-II Connection Logic
@@ -458,6 +496,11 @@ export default function App() {
       setConnectionStatus('disconnected');
       setConnectedDeviceName(null);
       const message = error instanceof Error ? error.message : "An unexpected Bluetooth error occurred.";
+      if (message.includes("No device selected") || message.includes("User cancelled") || message.includes("permission denied")) {
+        console.log("Bluetooth device selection cancelled, no device found, or permission denied. Resuming simulation.");
+        setIsSimulation(true);
+        return;
+      }
       console.error("Bluetooth Error:", message);
       throw new Error(message);
     }
@@ -864,7 +907,7 @@ export default function App() {
             <Settings size={20} />
           </button>
           <div>
-            <h1 className="text-2xl font-bold tracking-tighter text-white">ZTCD_V3</h1>
+            <h1 className="text-2xl font-bold tracking-tighter text-white">drivelogic AI</h1>
             <p className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-mono">Vehicle Telemetry System</p>
           </div>
         </div>
@@ -888,6 +931,35 @@ export default function App() {
           )}
         </div>
       </motion.header>
+
+      {/* Top Dashboard (Music + Assistant Input) */}
+      <div className="bg-car-card/50 backdrop-blur-md border-b border-white/5 p-4 flex flex-col gap-3 z-40 sticky top-[88px]">
+        <MusicPlayer ref={musicPlayerRef} />
+        <div className="flex items-center gap-2">
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              placeholder="Ask assistant or enter destination..."
+              className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-4 pr-10 text-xs text-white placeholder:text-white/40 focus:outline-none focus:border-car-accent/50"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const val = e.currentTarget.value;
+                  if (val.trim()) {
+                    chatAssistantRef.current?.handleSend(val);
+                    e.currentTarget.value = '';
+                  }
+                }
+              }}
+            />
+            <button
+              onClick={() => chatAssistantRef.current?.toggleMic()}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-white/40 hover:text-white transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
 
       {criticalTasks.length > 0 && (
         <div 
@@ -921,6 +993,8 @@ export default function App() {
                 connectedDeviceName={connectedDeviceName}
                 onConnectReal={connectToOBD} 
                 onConnectSerial={connectToSerialOBD}
+                shockWarning={shockWarning}
+                isPro={isPro}
               />
             )}
             {activeTab === 'damage' && (
@@ -964,21 +1038,77 @@ export default function App() {
                 }}
               />
             )}
+            
+            {activeTab === 'fleet' && (
+              isPro ? (
+                <FleetTab />
+              ) : (
+                <div className="flex flex-col items-center justify-center text-center space-y-4 py-12">
+                  <div className="p-4 bg-car-accent/10 rounded-full">
+                    <Crown className="text-car-accent" size={48} />
+                  </div>
+                  <h2 className="text-2xl font-bold">drivelogic AI Pro Required</h2>
+                  <p className="text-white/60 text-sm max-w-xs">
+                    Fleet Management is a premium feature. Upgrade to monitor multiple vehicles, track driver damage scores, and manage maintenance across your organization.
+                  </p>
+                  <button 
+                    onClick={() => setShowSettings(true)}
+                    className="mt-4 px-6 py-3 bg-car-accent text-white rounded-xl font-bold uppercase tracking-widest hover:bg-car-accent/80 transition-colors"
+                  >
+                    Upgrade Now
+                  </button>
+                </div>
+              )
+            )}
           </motion.div>
         </AnimatePresence>
       </main>
 
-      <FloatingMap navigation={navigation} setNavigation={setNavigation} mapsApiKey={apiKeys.maps} isMapsLoaded={isMapsLoaded} />
+      {/* Combined Floating Panel */}
+      <motion.div
+        ref={resizeRef}
+        drag
+        dragMomentum={false}
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ 
+          opacity: 1, 
+          scale: 1, 
+          y: 0,
+          width: isPanelMinimized ? 160 : (navigation.isActive ? panelSize.width * 2 : panelSize.width),
+          height: isPanelMinimized ? 120 : panelSize.height
+        }}
+        className={cn(
+          "fixed bottom-24 right-4 z-50 glass-card rounded-2xl overflow-hidden border border-car-accent/30 shadow-2xl flex flex-col md:flex-row transition-all duration-300"
+        )}
+      >
+        {/* Resize Handle (Top-Left) */}
+        {!isPanelMinimized && (
+          <div 
+            onMouseDown={startResize}
+            onTouchStart={startResize}
+            className="absolute top-0 left-0 w-6 h-6 cursor-nw-resize z-[60] flex items-center justify-center group"
+          >
+            <div className="w-1.5 h-1.5 bg-white/20 rounded-full group-hover:bg-car-accent transition-colors" />
+          </div>
+        )}
 
-      <MusicPlayer ref={musicPlayerRef} />
-
-      <ChatAssistant 
-        ref={chatAssistantRef}
-        onTabChange={(tab) => setActiveTab(tab)}
-        onSetNavigation={(from, to) => setNavigation({ from, to, isActive: true })}
-        onDiagnose={handleAIDiagnosis}
-        onMusicControl={(action) => musicPlayerRef.current?.control(action)}
-      />
+        <div className={cn("flex-1 h-full flex flex-col", navigation.isActive && !isPanelMinimized ? "hidden md:flex" : "flex")}>
+          <ChatAssistant 
+            ref={chatAssistantRef}
+            isMini={isPanelMinimized}
+            onToggleMini={() => setIsPanelMinimized(!isPanelMinimized)}
+            onTabChange={(tab) => setActiveTab(tab)}
+            onSetNavigation={(from, to) => setNavigation({ from, to, isActive: true })}
+            onDiagnose={handleAIDiagnosis}
+            onMusicControl={(action) => musicPlayerRef.current?.control(action)}
+          />
+        </div>
+        {navigation.isActive && !isPanelMinimized && (
+          <div className="flex-1 h-full border-t md:border-t-0 md:border-l border-white/10">
+            <FloatingMap navigation={navigation} setNavigation={setNavigation} mapsApiKey={apiKeys.maps} isMapsLoaded={isMapsLoaded} />
+          </div>
+        )}
+      </motion.div>
 
       {/* Settings Modal */}
       <AnimatePresence>
@@ -1033,6 +1163,64 @@ export default function App() {
                 </button>
               </div>
 
+              <div className="space-y-4">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-white/40 pl-2">Monetization & Features</div>
+                
+                {/* Pro Subscription Toggle */}
+                <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10">
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <Crown className="text-car-accent" size={16} />
+                      <span className="text-sm font-medium text-white">drivelogic AI Pro Subscription</span>
+                    </div>
+                    <span className="text-[10px] text-white/40 mt-1">Unlock AI Diagnostics & Fleet Mode</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const newValue = !isPro;
+                      setIsPro(newValue);
+                      localStorage.setItem('ztcd_is_pro', String(newValue));
+                    }}
+                    className={cn(
+                      "w-10 h-6 rounded-full transition-colors relative shrink-0",
+                      isPro ? "bg-car-accent" : "bg-white/20"
+                    )}
+                  >
+                    <div className={cn(
+                      "absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform",
+                      isPro ? "translate-x-4" : "translate-x-0"
+                    )} />
+                  </button>
+                </div>
+
+                {/* Data Sharing Toggle */}
+                <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10">
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <Share2 className="text-car-success" size={16} />
+                      <span className="text-sm font-medium text-white">Share Road Data</span>
+                    </div>
+                    <span className="text-[10px] text-white/40 mt-1">Anonymously share pothole data to help municipalities</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const newValue = !shareData;
+                      setShareData(newValue);
+                      localStorage.setItem('ztcd_share_data', String(newValue));
+                    }}
+                    className={cn(
+                      "w-10 h-6 rounded-full transition-colors relative shrink-0",
+                      shareData ? "bg-car-success" : "bg-white/20"
+                    )}
+                  >
+                    <div className={cn(
+                      "absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform",
+                      shareData ? "translate-x-4" : "translate-x-0"
+                    )} />
+                  </button>
+                </div>
+              </div>
+
               {/* ESP32-S3 Add-On Toggle */}
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10">
@@ -1045,13 +1233,18 @@ export default function App() {
                   </div>
                   <button
                     onClick={() => {
+                      if (!isPro && !useEsp32Addon) {
+                        alert("ESP32-S3 Telemetry is a Pro feature. Please enable drivelogic AI Pro first.");
+                        return;
+                      }
                       const newValue = !useEsp32Addon;
                       setUseEsp32Addon(newValue);
                       localStorage.setItem('ztcd_use_esp32', String(newValue));
                     }}
                     className={cn(
                       "w-10 h-6 rounded-full transition-colors relative shrink-0",
-                      useEsp32Addon ? "bg-car-purple" : "bg-white/20"
+                      useEsp32Addon ? "bg-car-purple" : "bg-white/20",
+                      !isPro && !useEsp32Addon ? "opacity-50 cursor-not-allowed" : ""
                     )}
                   >
                     <div className={cn(

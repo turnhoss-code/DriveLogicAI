@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Music, Volume2, X, Minimize2, Maximize2 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { Play, Pause, SkipBack, SkipForward, Music, Volume2 } from 'lucide-react';
+import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 
 interface Song {
@@ -28,7 +28,6 @@ const MusicPlayer = forwardRef<MusicPlayerHandle>((props, ref) => {
   const [currentSongIndex, setCurrentSongIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [currentTimeStr, setCurrentTimeStr] = useState('0:00');
-  const [isMini, setIsMini] = useState(true);
   const [volume, setVolume] = useState(75);
   
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -36,8 +35,6 @@ const MusicPlayer = forwardRef<MusicPlayerHandle>((props, ref) => {
 
   useImperativeHandle(ref, () => ({
     control: (action: string) => {
-      setIsMini(false); // Expand if mini
-      
       switch (action) {
         case 'play':
           setIsPlaying(true);
@@ -61,7 +58,6 @@ const MusicPlayer = forwardRef<MusicPlayerHandle>((props, ref) => {
     }
   }));
 
-  // Handle play/pause
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -70,9 +66,7 @@ const MusicPlayer = forwardRef<MusicPlayerHandle>((props, ref) => {
       const playPromise = audio.play();
       if (playPromise !== undefined) {
         playPromise.catch(e => {
-          // AbortError is expected when play() is interrupted by a new load request or pause()
           if (e.name === 'AbortError') return;
-          
           console.error("Audio play failed:", e);
           setIsPlaying(false);
         });
@@ -82,7 +76,6 @@ const MusicPlayer = forwardRef<MusicPlayerHandle>((props, ref) => {
     }
   }, [isPlaying, currentSongIndex]);
 
-  // Handle volume changes
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.volume = volume / 100;
@@ -97,7 +90,6 @@ const MusicPlayer = forwardRef<MusicPlayerHandle>((props, ref) => {
         setProgress((current / duration) * 100);
       }
       
-      // Format current time
       const mins = Math.floor(current / 60);
       const secs = Math.floor(current % 60);
       setCurrentTimeStr(`${mins}:${secs.toString().padStart(2, '0')}`);
@@ -121,7 +113,7 @@ const MusicPlayer = forwardRef<MusicPlayerHandle>((props, ref) => {
   };
 
   return (
-    <>
+    <div className="bg-white/5 border border-white/10 rounded-2xl p-3 flex items-center gap-3">
       <audio 
         ref={audioRef} 
         src={currentSong.url} 
@@ -129,125 +121,53 @@ const MusicPlayer = forwardRef<MusicPlayerHandle>((props, ref) => {
         onEnded={handleEnded}
       />
       
-      {/* Toggle Button Removed */}
+      <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 relative group">
+        <img 
+          src={currentSong.cover} 
+          alt={currentSong.title} 
+          className={cn("w-full h-full object-cover transition-transform duration-700", isPlaying ? "scale-110" : "scale-100")}
+          referrerPolicy="no-referrer"
+        />
+        <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+          <div className={cn("w-1.5 h-1.5 rounded-full bg-car-accent", isPlaying && "animate-ping")} />
+        </div>
+      </div>
 
-      <AnimatePresence>
-          <motion.div
-            drag
-            dragMomentum={false}
-            initial={{ opacity: 0, scale: 0.9, y: 20, x: -20 }}
-            animate={{ 
-              opacity: 1, 
-              scale: 1, 
-              y: 0, 
-              x: 0,
-              width: isMini ? 200 : 280,
-              height: isMini ? 80 : 360
-            }}
-            exit={{ opacity: 0, scale: 0.9, y: 20, x: -20 }}
-            className="fixed bottom-40 left-4 z-[60] glass-card rounded-2xl overflow-hidden border border-white/10 shadow-2xl flex flex-col"
-          >
-            {/* Header */}
-            <div className="p-3 bg-white/5 flex items-center justify-between border-b border-white/5 shrink-0">
-              <div className="flex items-center gap-2">
-                <Music size={14} className="text-car-accent" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-white/80">Media Player</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <button onClick={() => setIsMini(!isMini)} className="p-1 hover:bg-white/10 rounded-lg text-white/40">
-                  {isMini ? <Maximize2 size={12} /> : <Minimize2 size={12} />}
-                </button>
-              </div>
-            </div>
-
-            {/* Content */}
-            {!isMini ? (
-              <div className="flex-1 p-6 flex flex-col items-center justify-center space-y-6">
-                {/* Cover Art */}
-                <div className={cn(
-                  "relative w-32 h-32 rounded-2xl overflow-hidden shadow-2xl group transition-all duration-500",
-                  isPlaying ? "shadow-car-accent/20 scale-105" : "shadow-black/40"
-                )}>
-                  <img 
-                    src={currentSong.cover} 
-                    alt={currentSong.title} 
-                    className={cn("w-full h-full object-cover transition-transform duration-700", isPlaying ? "scale-110" : "scale-100")}
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-                    <div className={cn("w-2 h-2 rounded-full bg-car-accent", isPlaying && "animate-ping")} />
-                  </div>
-                </div>
-
-                {/* Info */}
-                <div className="text-center space-y-1">
-                  <h3 className="text-sm font-bold text-white truncate w-48">{currentSong.title}</h3>
-                  <p className="text-[10px] text-white/40 uppercase tracking-widest">{currentSong.artist}</p>
-                </div>
-
-                {/* Progress */}
-                <div className="w-full space-y-2">
-                  <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
-                    <motion.div 
-                      className="h-full bg-car-accent" 
-                      animate={{ width: `${progress}%` }}
-                      transition={{ type: "tween", duration: 0.1 }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-[8px] font-mono text-white/20">
-                    <span>{currentTimeStr}</span>
-                    <span>{currentSong.duration}</span>
-                  </div>
-                </div>
-
-                {/* Controls */}
-                <div className="flex items-center gap-6">
-                  <button onClick={prevSong} className="text-white/40 hover:text-white transition-colors">
-                    <SkipBack size={20} />
-                  </button>
-                  <button 
-                    onClick={togglePlay}
-                    className="w-12 h-12 rounded-full bg-car-accent text-white flex items-center justify-center hover:bg-car-accent/80 transition-all shadow-lg shadow-car-accent/20"
-                  >
-                    {isPlaying ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" className="ml-1" />}
-                  </button>
-                  <button onClick={nextSong} className="text-white/40 hover:text-white transition-colors">
-                    <SkipForward size={20} />
-                  </button>
-                </div>
-
-                {/* Volume */}
-                <div className="flex items-center gap-3 w-full px-4">
-                  <Volume2 size={12} className="text-white/20" />
-                  <div className="h-1 flex-1 bg-white/5 rounded-full overflow-hidden">
-                    <motion.div 
-                      className="h-full bg-white/20" 
-                      animate={{ width: `${volume}%` }}
-                    />
-                  </div>
-                  <span className="text-[8px] font-mono text-white/20 w-6 text-right">{Math.round(volume)}%</span>
-                </div>
-              </div>
-            ) : (
-              <div className="flex-1 px-4 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0">
-                  <img src={currentSong.cover} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-[10px] font-bold text-white truncate">{currentSong.title}</h3>
-                  <p className="text-[8px] text-white/40 truncate">{currentSong.artist}</p>
-                </div>
-                <button 
-                  onClick={togglePlay}
-                  className="w-8 h-8 rounded-full bg-car-accent text-white flex items-center justify-center shrink-0"
-                >
-                  {isPlaying ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" className="ml-0.5" />}
-                </button>
-              </div>
-            )}
-          </motion.div>
-      </AnimatePresence>
-    </>
+      <div className="flex-1 min-w-0 flex flex-col justify-center">
+        <div className="flex items-center justify-between mb-1">
+          <div className="min-w-0">
+            <h3 className="text-xs font-bold text-white truncate">{currentSong.title}</h3>
+            <p className="text-[9px] text-white/40 truncate uppercase tracking-widest">{currentSong.artist}</p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={prevSong} className="text-white/40 hover:text-white transition-colors">
+              <SkipBack size={14} />
+            </button>
+            <button 
+              onClick={togglePlay}
+              className="w-8 h-8 rounded-full bg-car-accent text-white flex items-center justify-center hover:bg-car-accent/80 transition-all shadow-lg shadow-car-accent/20"
+            >
+              {isPlaying ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" className="ml-0.5" />}
+            </button>
+            <button onClick={nextSong} className="text-white/40 hover:text-white transition-colors">
+              <SkipForward size={14} />
+            </button>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <span className="text-[8px] font-mono text-white/40 w-6">{currentTimeStr}</span>
+          <div className="h-1 flex-1 bg-white/5 rounded-full overflow-hidden">
+            <motion.div 
+              className="h-full bg-car-accent" 
+              animate={{ width: `${progress}%` }}
+              transition={{ type: "tween", duration: 0.1 }}
+            />
+          </div>
+          <span className="text-[8px] font-mono text-white/40 w-6 text-right">{currentSong.duration}</span>
+        </div>
+      </div>
+    </div>
   );
 });
 
