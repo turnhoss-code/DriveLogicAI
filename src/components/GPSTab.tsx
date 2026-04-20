@@ -388,10 +388,13 @@ export default function GPSTab({ isRecording, trips, navigation, setNavigation, 
         return;
       }
       console.error('Speech recognition error', event.error);
-      if (event.error === 'not-allowed') {
+      if (event.error === 'not-allowed' || event.error === 'network') {
         setIsWakeWordActive(false);
         setIsListening(false);
         setIsAwake(false);
+        if (event.error === 'network') {
+          console.warn("Speech recognition stopped due to a network error. Try recording again when online.");
+        }
       }
     };
     

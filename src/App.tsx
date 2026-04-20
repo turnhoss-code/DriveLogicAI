@@ -17,6 +17,7 @@ import ChatAssistant, { ChatAssistantHandle } from './components/ChatAssistant';
 import MusicPlayer, { MusicPlayerHandle } from './components/MusicPlayer';
 import MaintenanceTab from './components/MaintenanceTab';
 import FleetTab from './components/FleetTab';
+import Logo from './components/Logo';
 import { runAIDiagnosis } from './services/geminiService';
 import { MaintenanceTask } from './types';
 
@@ -179,7 +180,7 @@ export default function App() {
 
   // Real Sensor Logic (Phone Accelerometer)
   useEffect(() => {
-    if (isSimulation || useEsp32Addon) return;
+    if (useEsp32Addon) return;
 
     let lastUpdate = Date.now();
 
@@ -191,7 +192,6 @@ export default function App() {
       if (!event.accelerationIncludingGravity) return;
       
       const { x, y, z } = event.accelerationIncludingGravity;
-      // Calculate magnitude of acceleration (subtract 1G for gravity roughly if device is flat, or just use raw magnitude)
       const magnitude = Math.sqrt((x || 0) ** 2 + (y || 0) ** 2 + (z || 0) ** 2) / 9.81; 
       
       const gyroX = event.rotationRate?.alpha || 0;
@@ -207,7 +207,7 @@ export default function App() {
       // Simple damage score calculation based on real motion
       setDamageScore(prev => {
         let delta = 0;
-        // If magnitude is significantly higher than 1G (e.g., > 1.5G) or high rotation
+        // High magnitude (e.g., > 1.5G) or fast rotation indicates rough road / aggressive driving
         if (isRecording && (magnitude > 1.5 || gyroMag > 45)) delta += 5; 
         else if (prev > 0) delta -= 0.1; // Recovery
         return Math.max(0, Math.min(100, prev + delta));
@@ -216,14 +216,14 @@ export default function App() {
 
     window.addEventListener('devicemotion', handleMotion);
     return () => window.removeEventListener('devicemotion', handleMotion);
-  }, [isSimulation, isRecording, useEsp32Addon]);
+  }, [isRecording, useEsp32Addon]);
 
   // Simulation logic
   useEffect(() => {
     if (!isSimulation) {
-      setConnectionStatus('connected');
       return;
     }
+    
     setConnectionStatus('disconnected');
     
     const interval = setInterval(() => {
@@ -244,24 +244,17 @@ export default function App() {
           timestamp: Date.now(),
         };
       });
+    }, 1000);
 
-      // Sensor simulation (Accel & Gyro) - Toned down
-      const accel = isRecording ? 0.2 + Math.random() * 0.8 : 0.05 + Math.random() * 0.1;
-      const gyro = isRecording ? 5 + Math.random() * 20 : 0.5 + Math.random() * 2;
+    return () => clearInterval(interval);
+  }, [isSimulation, isRecording]);
 
-      setSensorHistory(prev => {
-        const newHistory = [...prev, { accel, gyro, timestamp: Date.now() }];
-        return newHistory.slice(-60);
-      });
-
-      // Damage score simulation based on "driving behavior" - Toned down
-      setDamageScore(prev => {
-        let delta = (Math.random() - 0.5) * 0.5; // Smaller random fluctuations
-        if (isRecording && (accel > 1.2 || gyro > 35)) delta += 5; // Less frequent and smaller "Harsh event"
-        const next = Math.max(0, Math.min(100, prev + delta));
-        
+  // Periodic Damage History Recording
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDamageScore(currentScore => {
         setDamageHistory(history => {
-          const newHistory = [...history, { score: next, timestamp: Date.now() }];
+          const newHistory = [...history, { score: currentScore, timestamp: Date.now() }];
           return newHistory.slice(-60);
         });
 
@@ -271,13 +264,13 @@ export default function App() {
             
             let newEvents = trip.events || [];
             
-            // Occasionally simulate an event if damage is high
-            if (next > 40 && Math.random() > 0.7) {
-              const eventType = next > 70 ? 'harsh_braking' : 'rapid_acceleration';
+            // Occasionally log high-damage events (harsh braking, rapid acceleration)
+            if (currentScore > 40 && Math.random() > 0.7) {
+              const eventType = currentScore > 70 ? 'harsh_braking' : 'rapid_acceleration';
               const lastWaypoint = trip.waypoints?.[trip.waypoints.length - 1];
               newEvents = [...newEvents, {
                 type: eventType as any,
-                severity: next,
+                severity: currentScore,
                 timestamp: Date.now(),
                 location: lastWaypoint ? { lat: lastWaypoint.lat, lng: lastWaypoint.lng } : undefined
               }];
@@ -285,13 +278,13 @@ export default function App() {
 
             return {
               ...trip,
-              damageHistory: [...(trip.damageHistory || []), { score: next, timestamp: Date.now() }],
+              damageHistory: [...(trip.damageHistory || []), { score: currentScore, timestamp: Date.now() }],
               events: newEvents,
             };
           });
         }
 
-        return next;
+        return currentScore;
       });
     }, 1000);
 
@@ -607,6 +600,69 @@ export default function App() {
     });
   };
 
+  const connectToBluetoothClassicOBD = async () => {
+    try {
+      if (!('serial' in navigator)) {
+        throw new Error("Web Serial API is not supported in this browser. Please use Chrome or Edge on desktop.");
+      }
+
+      // 00001101-0000-1000-8000-00805f9b34fb is the standard Serial Port Profile (SPP) UUID
+      const port = await (navigator as any).serial.requestPort({
+        allowedBluetoothServiceClassIds: ['00001101-0000-1000-8000-00805f9b34fb']
+      });
+
+      if (!port.readable && !port.writable) {
+        try {
+          await port.open({ baudRate: 38400 }); 
+        } catch (openError: any) {
+          if (openError.name !== 'InvalidStateError') {
+            try { await port.open({ baudRate: 115200 }); }
+            catch (e: any) {
+              try { await port.open({ baudRate: 9600 }); }
+              catch (finalError: any) {
+                if (finalError.message?.includes('Failed to open serial port')) {
+                  throw new Error("Failed to open port. Ensure the device is connected and not in use by another app.");
+                }
+                throw finalError;
+              }
+            }
+          }
+        }
+      }
+
+      setConnectionStatus('connecting');
+      setIsSimulation(false);
+      setConnectedDeviceName('Bluetooth Classic OBD-II');
+
+      const handleDisconnect = () => {
+        console.log("Serial disconnected.");
+        setConnectionStatus('disconnected');
+        setConnectedDeviceName(null);
+      };
+
+      (navigator as any).serial.addEventListener('disconnect', (event: any) => {
+        if (event.target === port) {
+          handleDisconnect();
+        }
+      });
+      
+      startSerialOBDPoll(port);
+      setConnectionStatus('connected');
+    } catch (error: any) {
+      setConnectionStatus('disconnected');
+      setConnectedDeviceName(null);
+      let message = error instanceof Error ? error.message : "An unexpected Serial error occurred.";
+      if (error.name === 'NotFoundError' || message.includes('No port selected by the user')) {
+        return; 
+      }
+      if (error.name === 'SecurityError' || message.includes('permissions policy')) {
+        message = "Web Serial API access is blocked by the browser. Please open the app in a new tab.";
+      }
+      console.error("Bluetooth Classic Error:", message);
+      throw new Error(message);
+    }
+  };
+
   const connectToSerialOBD = async (existingPort?: any) => {
     try {
       if (!('serial' in navigator)) {
@@ -906,6 +962,7 @@ export default function App() {
           >
             <Settings size={20} />
           </button>
+          <Logo />
           <div>
             <h1 className="text-2xl font-bold tracking-tighter text-white">drivelogic AI</h1>
             <p className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-mono">Vehicle Telemetry System</p>
@@ -992,6 +1049,7 @@ export default function App() {
                 connectionStatus={connectionStatus}
                 connectedDeviceName={connectedDeviceName}
                 onConnectReal={connectToOBD} 
+                onConnectBluetoothClassic={connectToBluetoothClassicOBD}
                 onConnectSerial={connectToSerialOBD}
                 shockWarning={shockWarning}
                 isPro={isPro}

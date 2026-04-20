@@ -165,7 +165,11 @@ const ChatAssistant = forwardRef<ChatAssistantHandle, ChatAssistantProps>(({ isM
         return;
       }
       console.error("Speech recognition error:", event.error);
-      setMicError(event.error === 'not-allowed' ? "Mic blocked" : "Mic error");
+      let errorMsg = "Mic error";
+      if (event.error === 'not-allowed') errorMsg = "Mic/Browser blocked";
+      if (event.error === 'network') errorMsg = "Network error";
+
+      setMicError(errorMsg);
       setIsListening(false);
       isListeningRef.current = false;
       isStartingRef.current = false;

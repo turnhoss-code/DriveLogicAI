@@ -14,12 +14,13 @@ interface OBDTabProps {
   connectionStatus: 'disconnected' | 'connecting' | 'connected';
   connectedDeviceName?: string | null;
   onConnectReal: () => Promise<void> | void;
+  onConnectBluetoothClassic: () => Promise<void> | void;
   onConnectSerial: (port?: any) => Promise<void> | void;
   shockWarning?: boolean;
   isPro?: boolean;
 }
 
-export default function OBDTab({ data, isSimulation, connectionStatus, connectedDeviceName, onConnectReal, onConnectSerial, shockWarning, isPro }: OBDTabProps) {
+export default function OBDTab({ data, isSimulation, connectionStatus, connectedDeviceName, onConnectReal, onConnectBluetoothClassic, onConnectSerial, shockWarning, isPro }: OBDTabProps) {
   const [diagnosis, setDiagnosis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
@@ -259,11 +260,25 @@ export default function OBDTab({ data, isSimulation, connectionStatus, connected
             <div className="flex flex-col gap-2 items-end">
               <div className="flex gap-2">
                 <button 
-                  onClick={handleConnect}
+                  onClick={async () => {
+                    try {
+                      await onConnectBluetoothClassic();
+                      setConnectionError(null);
+                    } catch (err) {
+                      setConnectionError(err instanceof Error ? err.message : 'Failed to connect via BT Classic');
+                    }
+                  }}
                   className="px-3 py-1.5 bg-car-accent text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-car-accent/80 transition-colors flex items-center gap-1"
-                  title="Connect via ELM327 Bluetooth"
+                  title="Connect via Bluetooth Classic (SPP)"
                 >
-                  <Bluetooth className="w-3 h-3" /> ELM327 BT
+                  <Bluetooth className="w-3 h-3" /> BT Classic
+                </button>
+                <button 
+                  onClick={handleConnect}
+                  className="px-3 py-1.5 bg-car-accent text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-car-accent/80 transition-colors flex items-center gap-1 opacity-70"
+                  title="Connect via BLE"
+                >
+                  <Bluetooth className="w-3 h-3" /> BLE
                 </button>
                 
                 {availablePorts.length === 0 ? (
