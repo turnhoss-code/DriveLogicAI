@@ -1,4 +1,4 @@
-package com.example.cardiagnostics;
+package com.cardiagnostics.app;
 
 import com.getcapacitor.BridgeActivity;
 

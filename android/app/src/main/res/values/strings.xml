@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Car Diagnostics AI</string>
-    <string name="title_activity_main">Car Diagnostics AI</string>
-    <string name="package_name">com.example.cardiagnostics</string>
-    <string name="custom_url_scheme">com.example.cardiagnostics</string>
+    <string name="app_name">DriveLogic AI</string>
+    <string name="title_activity_main">DriveLogic AI</string>
+    <string name="package_name">com.cardiagnostics.app</string>
+    <string name="custom_url_scheme">com.cardiagnostics.app</string>
 </resources>

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, f
 import { Bot, Loader2, Volume2, VolumeX, Minimize2 } from 'lucide-react';
 import { processVoiceCommand } from '../services/geminiService';
 import { cn } from '../lib/utils';
+import { Vehicle } from '../types';
 
 interface Message {
   id: string;
@@ -17,6 +18,7 @@ interface ChatAssistantProps {
   onSetNavigation: (from: string, to: string) => void;
   onDiagnose: () => Promise<string | void> | string | void;
   onMusicControl: (action: string) => void;
+  selectedVehicle: Vehicle;
 }
 
 export interface ChatAssistantHandle {
@@ -24,7 +26,7 @@ export interface ChatAssistantHandle {
   handleSend: (text: string) => void;
 }
 
-const ChatAssistant = forwardRef<ChatAssistantHandle, ChatAssistantProps>(({ isMini, onToggleMini, onTabChange, onSetNavigation, onDiagnose, onMusicControl }, ref) => {
+const ChatAssistant = forwardRef<ChatAssistantHandle, ChatAssistantProps>(({ isMini, onToggleMini, onTabChange, onSetNavigation, onDiagnose, onMusicControl, selectedVehicle }, ref) => {
   const [messages, setMessages] = useState<Message[]>([
     { id: '1', text: "Hello! I'm your ZTCD AI Assistant. How can I help you today?", sender: 'ai', timestamp: Date.now() }
   ]);
@@ -68,7 +70,7 @@ const ChatAssistant = forwardRef<ChatAssistantHandle, ChatAssistantProps>(({ isM
     setInput('');
     setIsLoading(true);
 
-    const result = await processVoiceCommand(text);
+    const result = await processVoiceCommand(text, selectedVehicle);
     
     let diagnosisResult = "";
 

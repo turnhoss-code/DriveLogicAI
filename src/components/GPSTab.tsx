@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Map as MapIcon, MapPin, Navigation, BrainCircuit, AlertCircle, Info, ArrowRight, Key, Search, AlertTriangle, Mic } from 'lucide-react';
-import { Trip, NavigationState } from '../types';
+import { Trip, NavigationState, Vehicle } from '../types';
 import { getRouteRecommendation, processVoiceCommand } from '../services/geminiService';
 import { motion } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
@@ -16,6 +16,7 @@ interface GPSTabProps {
   isMapsLoaded: boolean;
   onDiagnose?: () => Promise<string | void> | string | void;
   onTabChange?: (tab: 'obd' | 'damage' | 'gps' | 'maintenance') => void;
+  selectedVehicle: Vehicle;
 }
 
 const mapContainerStyle = {
@@ -136,7 +137,7 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
   return R * c; // in metres
 };
 
-export default function GPSTab({ isRecording, trips, navigation, setNavigation, mapsApiKey, isMapsLoaded, onDiagnose, onTabChange }: GPSTabProps) {
+export default function GPSTab({ isRecording, trips, navigation, setNavigation, mapsApiKey, isMapsLoaded, onDiagnose, onTabChange, selectedVehicle }: GPSTabProps) {
   const [recommendation, setRecommendation] = useState<string | null>(null);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -249,7 +250,7 @@ export default function GPSTab({ isRecording, trips, navigation, setNavigation, 
     setSearchValue(command);
     
     // First, try to process with Gemini for complex commands
-    const result = await processVoiceCommand(command);
+    const result = await processVoiceCommand(command, selectedVehicle);
     
     let handled = false;
     if (result.functionCalls) {

@@ -7,7 +7,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Activity, Gauge, Map as MapIcon, History, Play, Square, BrainCircuit, AlertTriangle, ChevronRight, Settings, X, Key, Wrench, Shield, Eye, EyeOff, Trash2, Truck, Share2, Crown, Minimize2, Bot } from 'lucide-react';
 import { useJsApiLoader } from '@react-google-maps/api';
 import { motion, AnimatePresence } from 'motion/react';
-import { OBDData, Trip, DamagePoint, TripEvent, SensorPoint, NavigationState } from './types';
+import { OBDData, Trip, DamagePoint, TripEvent, SensorPoint, NavigationState, Vehicle } from './types';
 import { cn } from './lib/utils';
 import OBDTab from './components/OBDTab';
 import DamageLogTab from './components/DamageLogTab';
@@ -18,6 +18,7 @@ import MusicPlayer, { MusicPlayerHandle } from './components/MusicPlayer';
 import MaintenanceTab from './components/MaintenanceTab';
 import FleetTab from './components/FleetTab';
 import Logo from './components/Logo';
+import VehicleSelector from './components/VehicleSelector';
 import { runAIDiagnosis } from './services/geminiService';
 import { MaintenanceTask } from './types';
 
@@ -64,6 +65,28 @@ export default function App() {
   const [isPro, setIsPro] = useState(() => localStorage.getItem('ztcd_is_pro') === 'true');
   const [shareData, setShareData] = useState(() => localStorage.getItem('ztcd_share_data') === 'true');
   const [showApiKeys, setShowApiKeys] = useState(false);
+  const [showVehicleSelector, setShowVehicleSelector] = useState(false);
+  const [vehicles, setVehicles] = useState<Vehicle[]>(() => {
+    const saved = localStorage.getItem('ztcd_vehicles');
+    return saved ? JSON.parse(saved) : [{
+      id: 'default',
+      make: 'Generic',
+      model: 'Vehicle',
+      year: 2024,
+      fuelType: 'gasoline'
+    }];
+  });
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>(() => {
+    return localStorage.getItem('ztcd_selected_vehicle_id') || 'default';
+  });
+
+  const selectedVehicle = vehicles.find(v => v.id === selectedVehicleId) || vehicles[0];
+
+  useEffect(() => {
+    localStorage.setItem('ztcd_vehicles', JSON.stringify(vehicles));
+    localStorage.setItem('ztcd_selected_vehicle_id', selectedVehicleId);
+  }, [vehicles, selectedVehicleId]);
+
   const [sensorHistory, setSensorHistory] = useState<SensorPoint[]>([]);
   const [useEsp32Addon, setUseEsp32Addon] = useState(() => {
     return localStorage.getItem('ztcd_use_esp32') === 'true';
@@ -621,6 +644,9 @@ export default function App() {
               try { await port.open({ baudRate: 9600 }); }
               catch (finalError: any) {
                 if (finalError.message?.includes('Failed to open serial port')) {
+                  if (typeof port.forget === 'function') {
+                    try { await port.forget(); } catch (e) { console.warn("Failed to forget port", e); }
+                  }
                   throw new Error("Failed to open port. Ensure the device is connected and not in use by another app.");
                 }
                 throw finalError;
@@ -685,7 +711,10 @@ export default function App() {
                 await port.open({ baudRate: 9600 }); // Fallback for older ELM327
               } catch (finalError: any) {
                 if (finalError.message?.includes('Failed to open serial port')) {
-                  throw new Error("Failed to open serial port. It might be in use by another application or browser tab, or you may lack permissions.");
+                  if (typeof port.forget === 'function') {
+                    try { await port.forget(); } catch (e) { console.warn("Failed to forget port", e); }
+                  }
+                  throw new Error("Failed to open port. Ensure the device is connected and not in use by another app.");
                 }
                 throw finalError;
               }
@@ -802,6 +831,8 @@ export default function App() {
     queueCommand('ATE0');
     queueCommand('ATL0');
     queueCommand('ATH0');
+    queueCommand('ATCAF1');
+    queueCommand('ATAL');
     queueCommand('ATSP0');
 
     const pollInterval = setInterval(() => {
@@ -877,6 +908,8 @@ export default function App() {
     queueCommand('ATE0');   // Echo off
     queueCommand('ATL0');   // Linefeeds off
     queueCommand('ATH0');   // Headers off
+    queueCommand('ATCAF1'); // CAN Auto Formatting On
+    queueCommand('ATAL');   // Allow Long messages (>7 bytes)
     queueCommand('ATSP0');  // Auto protocol
 
     // Polling Loop
@@ -930,7 +963,7 @@ export default function App() {
     setActiveTab('obd');
     // The OBDTab will handle the actual diagnosis display if we trigger it, 
     // but for the ChatAssistant, we can just return the result.
-    return await runAIDiagnosis(obdData);
+    return await runAIDiagnosis(obdData, selectedVehicle);
   };
 
   const criticalTasks = maintenanceTasks.filter(task => {
@@ -1045,6 +1078,8 @@ export default function App() {
             {activeTab === 'obd' && (
               <OBDTab 
                 data={obdData} 
+                selectedVehicle={selectedVehicle}
+                onOpenVehicleSelector={() => setShowVehicleSelector(true)}
                 isSimulation={isSimulation} 
                 connectionStatus={connectionStatus}
                 connectedDeviceName={connectedDeviceName}
@@ -1080,6 +1115,7 @@ export default function App() {
                 isMapsLoaded={isMapsLoaded}
                 onDiagnose={handleAIDiagnosis}
                 onTabChange={(tab) => setActiveTab(tab)}
+                selectedVehicle={selectedVehicle}
               />
             )}
             {activeTab === 'maintenance' && (
@@ -1154,6 +1190,7 @@ export default function App() {
           <ChatAssistant 
             ref={chatAssistantRef}
             isMini={isPanelMinimized}
+            selectedVehicle={selectedVehicle}
             onToggleMini={() => setIsPanelMinimized(!isPanelMinimized)}
             onTabChange={(tab) => setActiveTab(tab)}
             onSetNavigation={(from, to) => setNavigation({ from, to, isActive: true })}
@@ -1167,6 +1204,26 @@ export default function App() {
           </div>
         )}
       </motion.div>
+
+      <AnimatePresence>
+        {showVehicleSelector && (
+          <VehicleSelector 
+            vehicles={vehicles}
+            selectedVehicleId={selectedVehicleId}
+            onSelect={(id) => {
+              setSelectedVehicleId(id);
+              setShowVehicleSelector(false);
+            }}
+            onAdd={(v) => {
+              const id = Math.random().toString(36).substr(2, 9);
+              setVehicles([...vehicles, { ...v, id }]);
+              setSelectedVehicleId(id);
+              setShowVehicleSelector(false);
+            }}
+            onClose={() => setShowVehicleSelector(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Settings Modal */}
       <AnimatePresence>

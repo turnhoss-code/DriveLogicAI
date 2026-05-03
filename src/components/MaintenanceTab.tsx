@@ -108,8 +108,8 @@ export default function MaintenanceTab({ tasks, totalMileage, onCompleteTask, on
                 <label className="text-[10px] text-white/40 uppercase tracking-wider mb-1 block">Interval (Miles)</label>
                 <input
                   type="number"
-                  value={newTask.intervalMiles}
-                  onChange={e => setNewTask({...newTask, intervalMiles: Number(e.target.value)})}
+                  value={Number.isNaN(newTask.intervalMiles) ? '' : newTask.intervalMiles}
+                  onChange={e => setNewTask({...newTask, intervalMiles: e.target.value === '' ? ('' as any) : Number(e.target.value)})}
                   className="w-full bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-car-accent"
                 />
               </div>
@@ -117,8 +117,8 @@ export default function MaintenanceTab({ tasks, totalMileage, onCompleteTask, on
                 <label className="text-[10px] text-white/40 uppercase tracking-wider mb-1 block">Interval (Months)</label>
                 <input
                   type="number"
-                  value={newTask.intervalMonths}
-                  onChange={e => setNewTask({...newTask, intervalMonths: Number(e.target.value)})}
+                  value={Number.isNaN(newTask.intervalMonths) ? '' : newTask.intervalMonths}
+                  onChange={e => setNewTask({...newTask, intervalMonths: e.target.value === '' ? ('' as any) : Number(e.target.value)})}
                   className="w-full bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-car-accent"
                 />
               </div>

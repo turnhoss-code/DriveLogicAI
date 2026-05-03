@@ -3,6 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export interface Vehicle {
+  id: string;
+  make: string;
+  model: string;
+  year: number;
+  engineSize?: string;
+  fuelType: 'gasoline' | 'diesel' | 'hybrid' | 'electric';
+  vin?: string;
+}
+
 export interface NavigationState {
   from: string;
   to: string;

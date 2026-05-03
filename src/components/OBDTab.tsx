@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { BrainCircuit, AlertCircle, CheckCircle2, Zap, Thermometer, Gauge, Activity, Bluetooth, AlertTriangle, ShieldCheck, ShieldAlert, Info, Usb, ShoppingCart, Wrench } from 'lucide-react';
-import { OBDData } from '../types';
+import { BrainCircuit, AlertCircle, CheckCircle2, Zap, Thermometer, Gauge, Activity, Bluetooth, AlertTriangle, ShieldCheck, ShieldAlert, Info, Usb, ShoppingCart, Wrench, Truck } from 'lucide-react';
+import { OBDData, Vehicle } from '../types';
 import { runAIDiagnosis, fetchDTCDefinition } from '../services/geminiService';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
@@ -10,6 +10,8 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 
 interface OBDTabProps {
   data: OBDData;
+  selectedVehicle: Vehicle;
+  onOpenVehicleSelector: () => void;
   isSimulation: boolean;
   connectionStatus: 'disconnected' | 'connecting' | 'connected';
   connectedDeviceName?: string | null;
@@ -20,7 +22,7 @@ interface OBDTabProps {
   isPro?: boolean;
 }
 
-export default function OBDTab({ data, isSimulation, connectionStatus, connectedDeviceName, onConnectReal, onConnectBluetoothClassic, onConnectSerial, shockWarning, isPro }: OBDTabProps) {
+export default function OBDTab({ data, selectedVehicle, onOpenVehicleSelector, isSimulation, connectionStatus, connectedDeviceName, onConnectReal, onConnectBluetoothClassic, onConnectSerial, shockWarning, isPro }: OBDTabProps) {
   const [diagnosis, setDiagnosis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
@@ -89,7 +91,7 @@ export default function OBDTab({ data, isSimulation, connectionStatus, connected
     if (!dtcDefinitions[code]) {
       setIsFetchingDtc(prev => ({ ...prev, [code]: true }));
       try {
-        const definition = await fetchDTCDefinition(code);
+        const definition = await fetchDTCDefinition(code, selectedVehicle);
         if (definition) {
           setDtcDefinitions(prev => ({ ...prev, [code]: definition }));
         } else {
@@ -169,7 +171,7 @@ export default function OBDTab({ data, isSimulation, connectionStatus, connected
       return;
     }
     setIsAnalyzing(true);
-    const result = await runAIDiagnosis(data);
+    const result = await runAIDiagnosis(data, selectedVehicle);
     setDiagnosis(result);
     setIsAnalyzing(false);
   };
@@ -238,6 +240,25 @@ export default function OBDTab({ data, isSimulation, connectionStatus, connected
 
   return (
     <div className="space-y-6">
+      {/* Vehicle Selection Header */}
+      <div className="glass-card p-4 rounded-2xl border border-white/5 bg-gradient-to-br from-white/5 to-transparent flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-car-accent/10 text-car-accent">
+            <Truck size={20} />
+          </div>
+          <div>
+            <h3 className="font-bold text-white leading-tight">{selectedVehicle.year} {selectedVehicle.make} {selectedVehicle.model}</h3>
+            <p className="text-[10px] uppercase tracking-widest text-white/40">{selectedVehicle.engineSize || 'Standard Engine'} • {selectedVehicle.fuelType}</p>
+          </div>
+        </div>
+        <button 
+          onClick={onOpenVehicleSelector}
+          className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-all"
+        >
+          Change Vehicle
+        </button>
+      </div>
+
       {/* Connection Status Indicator */}
       <div className="space-y-2">
         <div className={cn("flex items-center justify-between p-4 rounded-2xl border transition-all duration-500", status.bg, status.color.replace('text-', 'border-').replace('text-white/40', 'border-white/10'))}>
@@ -351,13 +372,13 @@ export default function OBDTab({ data, isSimulation, connectionStatus, connected
             </div>
           )}
         </div>
-        {connectionError && (
+            {connectionError && (
           <div className="flex flex-col gap-2 p-3 bg-car-danger/10 border border-car-danger/20 rounded-xl text-car-danger">
             <div className="flex items-center gap-2">
               <AlertCircle size={14} className="shrink-0" />
               <span className="text-xs">{connectionError}</span>
             </div>
-            {connectionError.includes('iframe') && (
+            {(connectionError.includes('iframe') || connectionError.includes('new tab') || connectionError.includes('browser tab') || connectionError.includes('permissions') || connectionError.includes('another app')) && (
               <button 
                 onClick={() => window.open(window.location.href, '_blank')}
                 className="self-start mt-1 px-3 py-1.5 bg-car-danger/20 hover:bg-car-danger/30 text-car-danger rounded-lg text-[10px] font-bold uppercase tracking-widest transition-colors"

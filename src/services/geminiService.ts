@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { OBDData, Trip } from "../types";
+import { OBDData, Trip, Vehicle } from "../types";
 
 const getAIInstance = () => {
   const userKey = localStorage.getItem('ztcd_gemini_api_key');
@@ -7,7 +7,7 @@ const getAIInstance = () => {
   return new GoogleGenAI({ apiKey });
 };
 
-export const processVoiceCommand = async (text: string) => {
+export const processVoiceCommand = async (text: string, vehicle: Vehicle) => {
   const ai = getAIInstance();
   const model = "gemini-3-flash-preview";
 
@@ -71,7 +71,7 @@ export const processVoiceCommand = async (text: string) => {
       contents: text,
       config: { 
         tools,
-        systemInstruction: "You are an AI Co-Pilot for a vehicle telemetry system. You can help the user change tabs, set navigation, diagnose the vehicle, and control the music player. When the user asks to play, pause, skip, or change volume, use the controlMusic tool."
+        systemInstruction: `You are an AI Co-Pilot for a vehicle telemetry system in a ${vehicle.year} ${vehicle.make} ${vehicle.model}. You can help the user change tabs, set navigation, diagnose the vehicle, and control the music player. When the user asks to play, pause, skip, or change volume, use the controlMusic tool.`
       }
     });
 
@@ -85,10 +85,11 @@ export const processVoiceCommand = async (text: string) => {
   }
 };
 
-export const runAIDiagnosis = async (data: OBDData) => {
+export const runAIDiagnosis = async (data: OBDData, vehicle: Vehicle) => {
   const ai = getAIInstance();
   const model = "gemini-3-flash-preview";
-  const prompt = `You are an expert automotive diagnostics AI. Analyze the following real-time vehicle OBD-II data and provide a comprehensive but plain-language health report. 
+  const prompt = `You are an expert automotive diagnostics AI specialized in ${vehicle.year} ${vehicle.make} ${vehicle.model} (${vehicle.engineSize || 'standard engine'}). 
+  Analyze the following real-time vehicle OBD-II data and provide a comprehensive but plain-language health report tailored specific to this vehicle model. 
   
   Vehicle Telemetry:
   - RPM: ${data.rpm}
@@ -102,7 +103,7 @@ export const runAIDiagnosis = async (data: OBDData) => {
   
   Please provide:
   1. A summary of the current vehicle health.
-  2. Identification of any anomalies or potential issues based on the telemetry and DTCs.
+  2. Identification of any anomalies or potential issues based on the telemetry and DTCs, considering known issues for a ${vehicle.year} ${vehicle.make} ${vehicle.model}.
   3. Specific, actionable recommendations for maintenance or repairs.
   
   Use plain English, avoid overly technical jargon where possible, and format the response clearly using Markdown. Keep the response under 300 words.`;
@@ -119,10 +120,10 @@ export const runAIDiagnosis = async (data: OBDData) => {
   }
 };
 
-export const fetchDTCDefinition = async (code: string) => {
+export const fetchDTCDefinition = async (code: string, vehicle: Vehicle) => {
   const ai = getAIInstance();
   const model = "gemini-3-flash-preview";
-  const prompt = `You are an expert automotive diagnostics AI. Provide a concise, plain English explanation of the OBD-II Diagnostic Trouble Code (DTC) ${code}. Include the likely causes and recommended actions. Keep the response under 150 words.`;
+  const prompt = `You are an expert automotive diagnostics AI. Provide a concise, plain English explanation of the OBD-II Diagnostic Trouble Code (DTC) ${code} specifically for a ${vehicle.year} ${vehicle.make} ${vehicle.model}. Include the likely causes and recommended actions tailored to this vehicle. Keep the response under 150 words.`;
 
   try {
     const response = await ai.models.generateContent({
